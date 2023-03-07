@@ -3,6 +3,17 @@
 
 # COMMAND ----------
 
+#UNIQUE_NAME = 'YOUR_UNIQUE_NAME'
+UNIQUE_NAME = 'mk1112' # <==ここを置き換えてください
+
+print(f'Your database name => {UNIQUE_NAME}')
+
+spark.sql(f'DROP DATABASE IF EXISTS {UNIQUE_NAME} CASCADE;')
+spark.sql(f'CREATE DATABASE IF NOT EXISTS {UNIQUE_NAME};')
+spark.sql(f'USE {UNIQUE_NAME};')
+
+# COMMAND ----------
+
 # MAGIC %md ### Storeテーブル
 
 # COMMAND ----------
@@ -12,11 +23,16 @@ df = (
     .format('csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .load('/mnt/pos/static_data/store.txt')
+    .load('dbfs:/tmp/realtime_pos/dest/store.txt')
 )
-df.createOrReplaceTempView('store')
 
-display(df)
+# DeltaLakeテーブルに書き出す
+df.write.format('delta').mode('overwrite').saveAsTable('store')
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC SELECT * FROM store;
 
 # COMMAND ----------
 
@@ -29,10 +45,15 @@ df = (
     .format('csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .load('/mnt/pos/static_data/item.txt')
+    .load('dbfs:/tmp/realtime_pos/dest/item.txt')
 )
-df.createOrReplaceTempView('item')
-display(df)
+
+df.write.format('delta').mode('overwrite').saveAsTable('item')
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC SELECT * FROM item;
 
 # COMMAND ----------
 
@@ -45,11 +66,15 @@ df = (
     .format('csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .load('/mnt/pos/static_data/inventory_change_type.txt')
+    .load('dbfs:/tmp/realtime_pos/dest/inventory_change_type.txt')
 )
-df.createOrReplaceTempView('inventory_change_type')
 
-display(df)
+df.write.format('delta').mode('overwrite').saveAsTable('inventory_change_type')
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC SELECT * FROM inventory_change_type
 
 # COMMAND ----------
 
@@ -57,14 +82,9 @@ display(df)
 
 # COMMAND ----------
 
-# MAGIC %fs rm -r /tmp/
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC DROP DATABASE IF EXISTS mk1112;
-# MAGIC CREATE DATABASE IF NOT EXISTS mk1112;
-# MAGIC USE mk1112;
+dbutils.fs.rm(f'/tmp/realtime_pos/inventory_change/', True)
+dbutils.fs.rm(f'/tmp/realtime_pos/inventory_snapshot/', True)
+dbutils.fs.rm(f'/tmp/{UNIQUE_NAME}/', True)
 
 # COMMAND ----------
 
@@ -78,8 +98,8 @@ df_st = (
     .option('cloudFiles.format', 'csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .option('cloudFiles.schemaLocation', '/tmp/masahiko.kitamura@databricks.com/inventory_change.chkpoint')
-    .load('/tmp/inventory_change_*.csv')
+    .option('cloudFiles.schemaLocation', '/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
+    .load('/tmp/realtime_pos/inventory_change/inventory_change_*.csv')
 )
 
 (
@@ -87,7 +107,7 @@ df_st = (
     .format('delta')
     #.trigger(availableNow=True)
     .trigger(processingTime='2 seconds')
-    .option('checkpointLocation', '/tmp/masahiko.kitamura@databricks.com/inventory_change.chkpoint')
+    .option('checkpointLocation', '/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
     .toTable('inventory_change')
 )
 
@@ -110,8 +130,8 @@ df_st = (
     .option('cloudFiles.format', 'csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .option('cloudFiles.schemaLocation', '/tmp/masahiko.kitamura@databricks.com/inventory_snapshot.chkpoint')
-    .load('/tmp/inventory_snapshot_*.csv')
+    .option('cloudFiles.schemaLocation', '/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
+    .load('/tmp/realtime_pos/inventory_snapshot/inventory_snapshot_*.csv')
 )
 
 (
@@ -119,10 +139,16 @@ df_st = (
     .format('delta')
     #.trigger(availableNow=True)
     .trigger(processingTime='2 seconds')
-    .option('checkpointLocation', '/tmp/masahiko.kitamura@databricks.com/inventory_snapshot.chkpoint')
+    .option('checkpointLocation', '/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
     .toTable('inventory_snapshot')
 )
 
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select * from inventory_snapshot
+# MAGIC order by date_time desc limit 50
 
 # COMMAND ----------
 
@@ -150,145 +176,6 @@ df_st = (
 # MAGIC   a.item_id
 # MAGIC order by
 # MAGIC   date_time desc;
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC select * from gold;
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-# MAGIC %md ### 以下はスキップ(Debug)
-
-# COMMAND ----------
-
-# MAGIC %md ### Inventry Spapshot
-
-# COMMAND ----------
-
-# df_st = (
-#     spark.readStream
-#     .format('cloudFiles')
-#     .option('cloudFiles.format', 'csv')
-#     .option('Header', True)
-#     .option('inferSchema', True)
-#     .option('cloudFiles.schemaLocation', '/tmp/masahiko.kitamura@databricks.com/inventory_snapshots.chkpoint')
-#     .load('/mnt/pos/generator/inventory_snapshot*.txt')
-# )
-
-# #df_st.awaitTermination()
-# #display(df_st)
-
-# (
-#     df_st.writeStream
-#     .format('delta')
-#     .trigger(availableNow=True)
-#     .option('checkpointLocation', '/tmp/masahiko.kitamura@databricks.com/inventory_snapshots.chkpoint')
-#     .toTable('inventry_snapshots')
-# )
-
-
-df = (
-    spark.read
-    .format('csv')
-    .option('Header', True)
-    .option('inferSchema', True)
-    .load('/mnt/pos/generator/inventory_snapshot_*.txt')
-)
-
-display(df)
-df.createOrReplaceTempView('inventry_snapshot')
-
-print( df.count() )
-
-df.createOrReplaceTempView('inv_snapshot')
-display(
-    spark.sql(
-        '''
-        SELECT date_time, count(item_id) FROM inv_snapshot GROUP BY date_time ORDER BY date_time
-        '''
-    )
-)
-
-# COMMAND ----------
-
-df.count()
-
-# COMMAND ----------
-
-# MAGIC %md ### Inventry Change
-
-# COMMAND ----------
-
-df = (
-    spark.read
-    .format('csv')
-    .option('Header', True)
-    .option('inferSchema', True)
-    .load('/mnt/pos/generator/inventory_change*.txt')
-)
-df.createOrReplaceTempView('inventory_change')
-
-display(df)
-
-# COMMAND ----------
-
-# MAGIC %md ## GOLD Table
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC 
-# MAGIC select 
-# MAGIC   a.store_id,
-# MAGIC   a.item_id,
-# MAGIC   FIRST(a.quantity) as snapshot_quantity,
-# MAGIC   FIRST(a.date_time) as date_time
-# MAGIC from inv_snapshot as a
-# MAGIC group by a.store_id, a.item_id
-# MAGIC order by date_time desc
-
-# COMMAND ----------
-
-# MAGIC %sql 
-# MAGIC select 
-# MAGIC   x.store_id,
-# MAGIC   x.item_id,
-# MAGIC   x.date_time,
-# MAGIC   x.quantity
-# MAGIC from inventory_change x
-# MAGIC inner join store y on x.store_id = y.store_id
-# MAGIC inner join inventory_change_type z on x.change_type_id = z.change_type_id
-# MAGIC where not( y.name = 'online' and z.change_type = 'bopis')
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC CREATE OR REPLACE TEMPORARY VIEW gold AS
-# MAGIC 
-# MAGIC select 
-# MAGIC   a.store_id,
-# MAGIC   a.item_id,
-# MAGIC   FIRST(a.quantity) as snapshot_quantity,
-# MAGIC   coalesce(sum(b.quantity), 0) as change_quantity,
-# MAGIC   first(a.quantity) + coalesce(sum(b.quantity), 0) as current_inventory,
-# MAGIC   GREATEST( FIRST(a.date_time), MAX(b.date_time)) as date_time
-# MAGIC from inv_snapshot as a
-# MAGIC left outer join inventory_change b
-# MAGIC on a.store_id = b.store_id 
-# MAGIC and a.item_id = b.item_id
-# MAGIC and a.date_time <= b.date_time
-# MAGIC 
-# MAGIC group by a.store_id, a.item_id
-# MAGIC order by date_time desc;
 
 # COMMAND ----------
 

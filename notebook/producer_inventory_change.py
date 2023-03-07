@@ -12,7 +12,7 @@ df = (
     .format('csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .load('/mnt/pos/generator/inventory_change*.txt')
+    .load('/tmp/realtime_pos/dest/inventory_change*.txt')
 )
 df.createOrReplaceTempView('inventory_change')
 
@@ -21,11 +21,15 @@ display(df)
 # COMMAND ----------
 
 # DBTITLE 1,(オプショナル)出力フォルダをクリアしておく
-# MAGIC %fs rm -r /tmp/inventory_change/
+# MAGIC %fs rm -r /tmp/realtime_pos/inventory_change
 
 # COMMAND ----------
 
 # MAGIC %run ./datagen
+
+# COMMAND ----------
+
+# MAGIC %sh mkdir -p /dbfs/tmp/realtime_pos/inventory_change
 
 # COMMAND ----------
 
@@ -34,7 +38,7 @@ dg = DataGen(
     tablename='inventory_change', 
     dt_colname='date_time', 
     start_datetime=datetime.fromisoformat('2021-01-01'), 
-    export_dir='/dbfs/tmp/inventory_change',
+    export_dir='/dbfs/tmp/realtime_pos/inventory_change',
     max_ite=5000,
     sleep_time=5,
     dt_step=timedelta(hours=1)
