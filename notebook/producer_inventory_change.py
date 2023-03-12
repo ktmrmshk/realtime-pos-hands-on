@@ -41,6 +41,7 @@ dg = DataGen(
     export_dir='/dbfs/tmp/realtime_pos/inventory_change',
     max_ite=5000,
     sleep_time=5,
-    dt_step=timedelta(hours=1)
+    dt_step=timedelta(hours=1),
+    dump_format='json'
 )
 dg.start()

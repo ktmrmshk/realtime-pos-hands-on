@@ -98,7 +98,7 @@ dbutils.fs.rm(f'/tmp/{UNIQUE_NAME}/', True)
 
 inventory_change_schema = '''
   trans_id string,
-  item_id int,
+  item_id string,
   store_id int,
   date_time timestamp,
   quantity int,
@@ -109,11 +109,11 @@ inventory_change_schema = '''
 df_st = (
     spark.readStream
     .format('cloudFiles')
-    .option('cloudFiles.format', 'csv')
+    .option('cloudFiles.format', 'json')
     .option('Header', True)
     .option('cloudFiles.schemaLocation', f'/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
     .schema(inventory_change_schema)
-    .load('/tmp/realtime_pos/inventory_change/inventory_change_*.csv')
+    .load('/tmp/realtime_pos/inventory_change/inventory_change_*.json')
 )
 
 (
