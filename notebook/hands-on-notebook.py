@@ -3,11 +3,17 @@
 
 # COMMAND ----------
 
+# MAGIC %sql
+# MAGIC USE CATALOG main;
+
+# COMMAND ----------
+
 #UNIQUE_NAME = 'YOUR_UNIQUE_NAME'
 UNIQUE_NAME = 'mk1112' # <==ここを置き換えてください
 
 print(f'Your database name => {UNIQUE_NAME}')
 
+# データベースの初期化(サラの状態にする)
 spark.sql(f'DROP DATABASE IF EXISTS {UNIQUE_NAME} CASCADE;')
 spark.sql(f'CREATE DATABASE IF NOT EXISTS {UNIQUE_NAME};')
 spark.sql(f'USE {UNIQUE_NAME};')
@@ -82,31 +88,39 @@ df.write.format('delta').mode('overwrite').saveAsTable('inventory_change_type')
 
 # COMMAND ----------
 
-#dbutils.fs.rm(f'/tmp/realtime_pos/inventory_change/', True)
-#dbutils.fs.rm(f'/tmp/realtime_pos/inventory_snapshot/', True)
 dbutils.fs.rm(f'/tmp/{UNIQUE_NAME}/', True)
 
 # COMMAND ----------
 
-# MAGIC %md ### Inventry Change
+# MAGIC %md ### Inventory Change
 
 # COMMAND ----------
+
+inventory_change_schema = '''
+  trans_id string,
+  item_id int,
+  store_id int,
+  date_time timestamp,
+  quantity int,
+  change_type_id int
+'''
+
 
 df_st = (
     spark.readStream
     .format('cloudFiles')
     .option('cloudFiles.format', 'csv')
     .option('Header', True)
-    .option('inferSchema', True)
     .option('cloudFiles.schemaLocation', f'/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
+    .schema(inventory_change_schema)
     .load('/tmp/realtime_pos/inventory_change/inventory_change_*.csv')
 )
 
 (
     df_st.writeStream
     .format('delta')
-    #.trigger(availableNow=True)
-    .trigger(processingTime='2 seconds')
+    .trigger(availableNow=True)
+    #.trigger(processingTime='2 seconds')
     .option('checkpointLocation', f'/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
     .toTable('inventory_change')
 )
@@ -120,25 +134,34 @@ df_st = (
 
 # COMMAND ----------
 
-# MAGIC %md ### Inventry Spapshot
+# MAGIC %md ### Inventory Spapshot
 
 # COMMAND ----------
+
+inventory_snapshot_schema = '''
+item_id int,
+employee_id int,
+store_id int,
+date_time timestamp,
+quantity int
+'''
+
 
 df_st = (
     spark.readStream
     .format('cloudFiles')
     .option('cloudFiles.format', 'csv')
     .option('Header', True)
-    .option('inferSchema', True)
     .option('cloudFiles.schemaLocation', f'/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
+    .schema(inventory_snapshot_schema)
     .load('/tmp/realtime_pos/inventory_snapshot/inventory_snapshot_*.csv')
 )
 
 (
     df_st.writeStream
     .format('delta')
-    #.trigger(availableNow=True)
-    .trigger(processingTime='2 seconds')
+    .trigger(availableNow=True)
+    #.trigger(processingTime='2 seconds')
     .option('checkpointLocation', f'/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
     .toTable('inventory_snapshot')
 )
@@ -158,7 +181,7 @@ df_st = (
 
 # MAGIC %sql
 # MAGIC CREATE
-# MAGIC OR REPLACE TEMPORARY VIEW gold AS
+# MAGIC OR REPLACE VIEW current_stock_summary_simple AS
 # MAGIC select
 # MAGIC   a.store_id,
 # MAGIC   a.item_id,
@@ -180,7 +203,7 @@ df_st = (
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC select * from gold;
+# MAGIC select * from current_stock_summary_simple;
 
 # COMMAND ----------
 
@@ -227,4 +250,5 @@ df_st = (
 
 # COMMAND ----------
 
-
+# MAGIC %sql
+# MAGIC select * from current_stock_summary
