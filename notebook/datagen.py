@@ -34,7 +34,7 @@ class DataGen(object):
                 if self.dump_format == 'csv':
                     pdf.to_csv(f'{self.export_dir}/{self.table_name}_{int(dt_in.timestamp())}.csv', index=False)
                 elif self.dump_format == 'json':
-                    pdf.to_json(f'{self.export_dir}/{self.table_name}_{int(dt_in.timestamp())}.json', orient='records', lines=True)
+                    pdf.to_json(f'{self.export_dir}/{self.table_name}_{int(dt_in.timestamp())}.json', orient='records', lines=True, date_unit='s')
                 else:
                     raise Exception(f'dump_format error: format must be csv or json - your dump_format => {self.dump_format}')
 

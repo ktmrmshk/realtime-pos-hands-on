@@ -45,3 +45,7 @@ dg = DataGen(
     dump_format='json'
 )
 dg.start()
+
+# COMMAND ----------
+
+
