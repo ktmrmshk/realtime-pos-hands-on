@@ -82,8 +82,8 @@ df.write.format('delta').mode('overwrite').saveAsTable('inventory_change_type')
 
 # COMMAND ----------
 
-dbutils.fs.rm(f'/tmp/realtime_pos/inventory_change/', True)
-dbutils.fs.rm(f'/tmp/realtime_pos/inventory_snapshot/', True)
+#dbutils.fs.rm(f'/tmp/realtime_pos/inventory_change/', True)
+#dbutils.fs.rm(f'/tmp/realtime_pos/inventory_snapshot/', True)
 dbutils.fs.rm(f'/tmp/{UNIQUE_NAME}/', True)
 
 # COMMAND ----------
@@ -98,7 +98,7 @@ df_st = (
     .option('cloudFiles.format', 'csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .option('cloudFiles.schemaLocation', '/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
+    .option('cloudFiles.schemaLocation', f'/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
     .load('/tmp/realtime_pos/inventory_change/inventory_change_*.csv')
 )
 
@@ -107,7 +107,7 @@ df_st = (
     .format('delta')
     #.trigger(availableNow=True)
     .trigger(processingTime='2 seconds')
-    .option('checkpointLocation', '/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
+    .option('checkpointLocation', f'/tmp/{UNIQUE_NAME}/inventory_change.chkpoint')
     .toTable('inventory_change')
 )
 
@@ -130,7 +130,7 @@ df_st = (
     .option('cloudFiles.format', 'csv')
     .option('Header', True)
     .option('inferSchema', True)
-    .option('cloudFiles.schemaLocation', '/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
+    .option('cloudFiles.schemaLocation', f'/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
     .load('/tmp/realtime_pos/inventory_snapshot/inventory_snapshot_*.csv')
 )
 
@@ -139,7 +139,7 @@ df_st = (
     .format('delta')
     #.trigger(availableNow=True)
     .trigger(processingTime='2 seconds')
-    .option('checkpointLocation', '/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
+    .option('checkpointLocation', f'/tmp/{UNIQUE_NAME}/inventory_snapshot.chkpoint')
     .toTable('inventory_snapshot')
 )
 
@@ -152,7 +152,7 @@ df_st = (
 
 # COMMAND ----------
 
-# MAGIC %md ### 最新の在庫テーブル(Gold)テーブル
+# MAGIC %md ### 最新の在庫テーブル(Gold)テーブル (簡易版)
 
 # COMMAND ----------
 
@@ -181,6 +181,49 @@ df_st = (
 
 # MAGIC %sql
 # MAGIC select * from gold;
+
+# COMMAND ----------
+
+# MAGIC %md ### 最新の在庫テーブル(Gold)テーブル (詳細フィルター版)
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC CREATE OR REPLACE VIEW current_stock_summary AS
+# MAGIC SELECT
+# MAGIC   -- calculate current inventory
+# MAGIC   a.store_id,
+# MAGIC   a.item_id,
+# MAGIC   FIRST(a.quantity) as snapshot_quantity,
+# MAGIC   COALESCE(SUM(b.quantity), 0) as change_quantity,
+# MAGIC   FIRST(a.quantity) + COALESCE(SUM(b.quantity), 0) as current_inventory,
+# MAGIC   GREATEST(FIRST(a.date_time), MAX(b.date_time)) as date_time
+# MAGIC FROM
+# MAGIC   inventory_snapshot a -- access latest snapshot
+# MAGIC   LEFT OUTER JOIN (
+# MAGIC     -- calculate inventory change with bopis corrections
+# MAGIC     SELECT
+# MAGIC       x.store_id,
+# MAGIC       x.item_id,
+# MAGIC       x.date_time,
+# MAGIC       x.quantity
+# MAGIC     FROM
+# MAGIC       inventory_change x
+# MAGIC       INNER JOIN store y ON x.store_id = y.store_id
+# MAGIC       INNER JOIN inventory_change_type z ON x.change_type_id = z.change_type_id
+# MAGIC     WHERE
+# MAGIC       NOT(
+# MAGIC         y.name = 'online'
+# MAGIC         AND z.change_type = 'bopis'
+# MAGIC       ) -- exclude bopis records from online store
+# MAGIC   ) b ON a.store_id = b.store_id
+# MAGIC   AND a.item_id = b.item_id
+# MAGIC   AND a.date_time <= b.date_time
+# MAGIC GROUP BY
+# MAGIC   a.store_id,
+# MAGIC   a.item_id
+# MAGIC ORDER BY
+# MAGIC   date_time DESC
 
 # COMMAND ----------
 
