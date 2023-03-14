@@ -84,7 +84,7 @@ df.write.format('delta').mode('overwrite').saveAsTable('inventory_change_type')
 
 # COMMAND ----------
 
-# MAGIC %md ### リアルタイム処理
+# MAGIC %md ## 動的なテーブル(リアルタイム処理)
 
 # COMMAND ----------
 
@@ -175,6 +175,10 @@ df_st = (
 
 # COMMAND ----------
 
+# MAGIC %md ## ビジネスサマリテーブル(マート)
+
+# COMMAND ----------
+
 # MAGIC %md ### 最新の在庫テーブル(Gold)テーブル (簡易版)
 
 # COMMAND ----------
@@ -252,3 +256,38 @@ df_st = (
 
 # MAGIC %sql
 # MAGIC select * from current_stock_summary
+
+# COMMAND ----------
+
+# MAGIC %md ## ダッシュボード用クエリ
+# MAGIC 
+# MAGIC 以下のセルのクエリを「SQLモード」のSQLエディタにコピー%ペーストして使用してください。
+
+# COMMAND ----------
+
+# DBTITLE 1,売上の時間推移(全体)/トランザクション数
+# MAGIC %sql
+# MAGIC 
+# MAGIC -- 売上の時間推移
+# MAGIC with inventory_change_realtime_hour AS (
+# MAGIC   SELECT *, date_trunc('HOUR', date_time) as dte_hour
+# MAGIC   from inventory_change
+# MAGIC   order by date_time desc
+# MAGIC   limit 100000
+# MAGIC )
+# MAGIC SELECT 
+# MAGIC   dte_hour, 
+# MAGIC   store_id,
+# MAGIC   count(1) as num_tx, 
+# MAGIC   -sum(quantity) as num_sales 
+# MAGIC FROM inventory_change_realtime_hour
+# MAGIC where change_type_id = 1
+# MAGIC group by dte_hour, store_id
+# MAGIC order by dte_hour
+
+# COMMAND ----------
+
+# DBTITLE 1,月間の来客数
+# MAGIC %sql
+# MAGIC 
+# MAGIC SELECT count( distinct trans_id ) from inventory_change
